@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>视频帧提取工具 - 滑动截帧 & 多格式导出</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            user-select: none; /* 提升拖动滑块体验，不影响文字输入 */
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(145deg, #1a2a3a 0%, #0f1a24 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 24px;
+            margin: 0;
+        }
+
+        /* 主卡片 */
+        .tool-container {
+            max-width: 1400px;
+            width: 100%;
+            background: rgba(255,255,255,0.08);
+            backdrop-filter: blur(2px);
+            border-radius: 2.5rem;
+            box-shadow: 0 25px 45px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.1);
+            overflow: hidden;
+            padding: 24px 28px;
+            transition: all 0.2s;
+        }
+
+        /* 两列布局 */
+        .split-layout {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 28px;
+        }
+
+        .video-section {
+            flex: 2;
+            min-width: 280px;
+            background: #00000030;
+            border-radius: 1.8rem;
+            padding: 18px;
+            backdrop-filter: blur(4px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+        }
+
+        .extract-section {
+            flex: 1.2;
+            min-width: 260px;
+            background: #11181fe0;
+            border-radius: 1.8rem;
+            padding: 20px;
+            backdrop-filter: blur(4px);
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+        }
+
+        /* 视频区域样式 */
+        .video-wrapper {
+            position: relative;
+            background: #000;
+            border-radius: 1.2rem;
+            overflow: hidden;
+            box-shadow: 0 8px 18px black;
+            margin-bottom: 20px;
+        }
+
+        video {
+            width: 100%;
+            display: block;
+            background: black;
+            aspect-ratio: 16 / 9;
+            object-fit: contain;
+        }
+
+        .controls {
+            margin-top: 12px;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .btn-icon {
+            background: #2c3e44;
+            border: none;
+            color: white;
+            font-size: 1.2rem;
+            padding: 8px 14px;
+            border-radius: 40px;
+            cursor: pointer;
+            transition: 0.2s;
+            font-weight: 500;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            backdrop-filter: blur(2px);
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+        }
+
+        .btn-icon:hover {
+            background: #3e5a64;
+            transform: scale(0.97);
+        }
+
+        .primary-btn {
+            background: #2c7a47;
+        }
+        .primary-btn:hover {
+            background: #3e9c5c;
+        }
+
+        .slider-container {
+            flex: 1;
+            min-width: 150px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .time-labels {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.75rem;
+            color: #ccddee;
+            font-family: monospace;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            height: 5px;
+            -webkit-appearance: none;
+            background: #3e5a64;
+            border-radius: 5px;
+            outline: none;
+            cursor: pointer;
+        }
+        input[type="range"]:focus {
+            outline: none;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 16px;
+            height: 16px;
+            background: #ffb347;
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 0 5px #ffb347;
+            border: none;
+        }
+        input[type="range"]::-webkit-slider-thumb:hover {
+            transform: scale(1.2);
+            background: #ffaa33;
+        }
+
+        .file-label {
+            background: #446d7c;
+            padding: 8px 16px;
+            border-radius: 40px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .file-label:hover {
+            background: #5d8f9e;
+        }
+
+        /* 右侧提取区 */
+        .preview-title {
+            font-weight: 600;
+            font-size: 1.2rem;
+            border-left: 4px solid #ffb347;
+            padding-left: 12px;
+            color: #f0f3f8;
+        }
+
+        .frame-canvas-container {
+            background: #000000aa;
+            border-radius: 20px;
+            padding: 12px;
+            text-align: center;
+            border: 1px solid #ffffff30;
+        }
+
+        canvas {
+            width: 100%;
+            background: #1e2a32;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px black;
+            display: block;
+            margin: 0 auto;
+        }
+
+        .format-row {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        select, .quality-slider {
+            background: #1f2f38;
+            border: 1px solid #3e6b7c;
+            padding: 10px 12px;
+            border-radius: 28px;
+            color: white;
+            font-weight: 500;
+            cursor: pointer;
+            outline: none;
+        }
+
+        .quality-ctrl {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .quality-ctrl span {
+            font-size: 0.8rem;
+            color: #ccddee;
+        }
+
+        .export-btn {
+            background: #ff914d;
+            color: #1e2a2f;
+            font-weight: bold;
+            font-size: 1.1rem;
+            padding: 12px;
+            width: 100%;
+            border: none;
+            border-radius: 50px;
+            transition: 0.2s;
+            cursor: pointer;
+            margin-top: 8px;
+            letter-spacing: 1px;
+        }
+        .export-btn:hover {
+            background: #ffaa66;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.3);
+        }
+
+        .info-tip {
+            font-size: 0.7rem;
+            text-align: center;
+            color: #aaccee;
+            background: #00000055;
+            border-radius: 20px;
+            padding: 6px;
+        }
+
+        hr {
+            border-color: #3e6b7c;
+            margin: 8px 0;
+        }
+
+        @media (max-width: 780px) {
+            .tool-container {
+                padding: 16px;
+            }
+            .btn-icon {
+                padding: 6px 12px;
+                font-size: 0.9rem;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<div class="tool-container">
+    <div class="split-layout">
+        <!-- 左侧视频区域 -->
+        <div class="video-section">
+            <div class="video-wrapper">
+                <video id="videoPlayer" crossorigin="anonymous" style="width:100%;"></video>
+            </div>
+            <div class="controls">
+                <label class="file-label btn-icon">
+                    📁 导入视频
+                    <input type="file" id="videoUpload" accept="video/mp4,video/webm,video/ogg,video/quicktime" style="display:none">
+                </label>
+                <button id="playPauseBtn" class="btn-icon">⏸️ 暂停</button>
+                <div class="slider-container">
+                    <div class="time-labels">
+                        <span id="currentTimeDisplay">0:00</span>
+                        <span id="durationDisplay">0:00</span>
+                    </div>
+                    <input type="range" id="seekSlider" value="0" step="0.01" disabled>
+                </div>
+            </div>
+            <div class="info-tip">
+                💡 提示：拖动进度条 → 松开鼠标自动提取当前帧到右侧预览区，支持多种格式导出。
+            </div>
+        </div>
+
+        <!-- 右侧提取区域 -->
+        <div class="extract-section">
+            <div class="preview-title">🎞️ 当前帧预览</div>
+            <div class="frame-canvas-container">
+                <canvas id="frameCanvas" style="width:100%; background:#0a121c; border-radius:12px;"></canvas>
+                <div style="font-size:12px; margin-top:8px; color:#bbddff;">滑动停止后自动提取</div>
+            </div>
+
+            <div class="format-row">
+                <label style="font-size:0.9rem;">📸 导出格式</label>
+                <select id="imageFormat">
+                    <option value="image/png">PNG (无损)</option>
+                    <option value="image/jpeg">JPEG (有损)</option>
+                    <option value="image/webp">WebP (高压缩)</option>
+                </select>
+            </div>
+
+            <div class="quality-ctrl" id="qualityControl" style="display: flex;">
+                <span>✨ 图片质量 (JPEG/WebP):</span>
+                <input type="range" id="qualitySlider" min="0.1" max="1.0" step="0.01" value="0.92">
+                <span id="qualityValue">92%</span>
+            </div>
+
+            <button id="exportBtn" class="export-btn">⬇️ 导出当前帧图片</button>
+            <button id="manualCaptureBtn" class="btn-icon" style="background:#3a6b5e;">📸 手动提取此帧</button>
+            <div class="info-tip">
+                ※ 导出时使用右侧预览画面 (自动跟随视频进度)<br>
+                ※ 支持 PNG / JPEG / WebP，可调节质量
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    (function(){
+        // DOM 元素
+        const video = document.getElementById('videoPlayer');
+        const videoUpload = document.getElementById('videoUpload');
+        const playPauseBtn = document.getElementById('playPauseBtn');
+        const seekSlider = document.getElementById('seekSlider');
+        const currentTimeDisplay = document.getElementById('currentTimeDisplay');
+        const durationDisplay = document.getElementById('durationDisplay');
+        const frameCanvas = document.getElementById('frameCanvas');
+        const imageFormatSelect = document.getElementById('imageFormat');
+        const qualitySlider = document.getElementById('qualitySlider');
+        const qualityValue = document.getElementById('qualityValue');
+        const exportBtn = document.getElementById('exportBtn');
+        const manualCaptureBtn = document.getElementById('manualCaptureBtn');
+        const qualityControlDiv = document.getElementById('qualityControl');
+        
+        // 状态变量
+        let isVideoLoaded = false;
+        let currentVideoURL = null;
+        let isDraggingSlider = false;      // 是否正在拖动滑块（用于防止频繁seek干扰）
+        let pendingSeek = false;            // 标记滑块最终值需要跳转
+        
+        // 辅助函数: 时间格式化 mm:ss 或 hh:mm:ss
+        function formatTime(seconds) {
+            if (isNaN(seconds)) return "0:00";
+            const hrs = Math.floor(seconds / 3600);
+            const mins = Math.floor((seconds % 3600) / 60);
+            const secs = Math.floor(seconds % 60);
+            if (hrs > 0) {
+                return `${hrs}:${mins.toString().padStart(2,'0')}:${secs.toString().padStart(2,'0')}`;
+            }
+            return `${mins}:${secs.toString().padStart(2,'0')}`;
+        }
+        
+        // 更新滑块和时间的UI (从video.currentTime同步)
+        function updateTimeUI() {
+            if (!isVideoLoaded) return;
+            const current = video.currentTime;
+            const dur = video.duration || 0;
+            seekSlider.value = current;
+            currentTimeDisplay.textContent = formatTime(current);
+            if (dur && isFinite(dur)) {
+                durationDisplay.textContent = formatTime(dur);
+                seekSlider.max = dur;
+            } else {
+                seekSlider.max = 0;
+            }
+        }
+        
+        // 核心: 从当前视频帧捕获图像并绘制到右侧canvas (原始分辨率)
+        function captureCurrentFrameToCanvas() {
+            if (!isVideoLoaded || video.readyState < 2) {
+                console.warn("视频未就绪，无法提取帧");
+                return false;
+            }
+            const videoWidth = video.videoWidth;
+            const videoHeight = video.videoHeight;
+            if (videoWidth === 0 || videoHeight === 0) {
+                console.warn("视频尺寸无效");
+                return false;
+            }
+            // 设置canvas为视频原始分辨率，保证导出图片清晰
+            frameCanvas.width = videoWidth;
+            frameCanvas.height = videoHeight;
+            const ctx = frameCanvas.getContext('2d');
+            // 绘制视频帧（精确当前帧）
+            ctx.drawImage(video, 0, 0, videoWidth, videoHeight);
+            // 同时为保留视觉效果，CSS宽高自适应 (保持比例)
+            frameCanvas.style.width = '100%';
+            frameCanvas.style.height = 'auto';
+            return true;
+        }
+        
+        // 当视频跳转/暂停/播放时调用：更新UI + 捕获帧（用于滑动停止后的自动提取）
+        function onVideoSeekedOrFrameUpdate() {
+            if (!isVideoLoaded) return;
+            updateTimeUI();
+            // 每次时间改变（包括滑动停止/点击跳转）自动提取当前帧到右侧预览
+            captureCurrentFrameToCanvas();
+        }
+        
+        // 监听 video 的关键事件
+        function bindVideoEvents() {
+            video.addEventListener('loadedmetadata', () => {
+                if (video.duration && isFinite(video.duration)) {
+                    seekSlider.max = video.duration;
+                    durationDisplay.textContent = formatTime(video.duration);
+                    isVideoLoaded = true;
+                    seekSlider.disabled = false;
+                    updateTimeUI();
+                    // 加载后默认将第一帧显示到画布
+                    captureCurrentFrameToCanvas();
+                }
+            });
+            
+            video.addEventListener('seeked', () => {
+                // 无论什么原因跳转结束，刷新UI并捕获帧
+                if (isVideoLoaded) {
+                    updateTimeUI();
+                    captureCurrentFrameToCanvas();
+                }
+                // 如果有等待中的拖动标记也清除
+                if (pendingSeek) pendingSeek = false;
+            });
+            
+            video.addEventListener('timeupdate', () => {
+                if (!isDraggingSlider) {
+                    // 只有在非主动拖动滑块时才同步滑块位置（播放时或用户seek后自然同步）
+                    updateTimeUI();
+                }
+            });
+            
+            video.addEventListener('play', () => {
+                playPauseBtn.innerHTML = '⏸️ 暂停';
+            });
+            video.addEventListener('pause', () => {
+                playPauseBtn.innerHTML = '▶️ 播放';
+            });
+            
+            // 保证每次视频可以播放时(关键帧)也及时捕获一次（比如手动点击播放过程中的帧）
+            video.addEventListener('canplay', () => {
+                if (isVideoLoaded) captureCurrentFrameToCanvas();
+            });
+            // 额外监听loadeddata确保第一次画布有内容
+            video.addEventListener('loadeddata', () => {
+                if (isVideoLoaded) captureCurrentFrameToCanvas();
+            });
+        }
+        
+        // 释放之前的视频资源
+        function releaseVideo() {
+            if (currentVideoURL) {
+                URL.revokeObjectURL(currentVideoURL);
+                currentVideoURL = null;
+            }
+            video.pause();
+            video.src = '';
+            video.load();
+            isVideoLoaded = false;
+            seekSlider.disabled = true;
+            seekSlider.value = 0;
+            currentTimeDisplay.textContent = "0:00";
+            durationDisplay.textContent = "0:00";
+            // 清空画布
+            const ctx = frameCanvas.getContext('2d');
+            frameCanvas.width = 640;
+            frameCanvas.height = 360;
+            ctx.fillStyle = "#0a121c";
+            ctx.fillRect(0, 0, frameCanvas.width, frameCanvas.height);
+            ctx.fillStyle = "#88aacc";
+            ctx.font = "14px sans-serif";
+            ctx.fillText("等待导入视频", 20, 50);
+        }
+        
+        // 处理新视频导入
+        function handleVideoFile(file) {
+            if (!file) return;
+            // 释放旧的资源
+            releaseVideo();
+            const url = URL.createObjectURL(file);
+            currentVideoURL = url;
+            video.src = url;
+            video.load();
+            // 确保视频加载后显示第一帧; 由于异步，事件会触发捕获
+            // 同时设置播放器建议暂停状态，方便提取
+            video.pause();
+            // 重置滑块启用状态会在loadedmetadata里做
+        }
+        
+        // 滑块交互处理 —— 实现“滑动停止时可以提取出图片”
+        // 策略：使用input事件实时更新时间标签(不加seek,保证流畅)，使用change事件最终跳转并提取帧
+        // 同时为了让用户体验到实时时间，可以在input时更新显示但不请求视频跳转；最终松手才跳转并自动提取。
+        // 但要求"滑动视频帧随意停止时可以提取出图片"，change时跳转并提取满足完全停止后提取。
+        // 额外优化：为了更直观，拖动时显示当前时间文本，显示提示待跳转帧；松开后视频跳转并提取。
+        let tempSliderValue = 0;
+        seekSlider.addEventListener('input', (e) => {
+            if (!isVideoLoaded) return;
+            const val = parseFloat(e.target.value);
+            tempSliderValue = val;
+            // 实时更新时间标签，给用户反馈
+            currentTimeDisplay.textContent = formatTime(val);
+            // 不设置video.currentTime防止频繁seek卡顿，仅仅UI预览时间
+        });
+        
+        seekSlider.addEventListener('mousedown', () => {
+            if (!isVideoLoaded) return;
+            isDraggingSlider = true;
+            // 拖动的时候暂停视频，避免进度冲突
+            if (!video.paused) {
+                video.pause();
+            }
+        });
+        
+        seekSlider.addEventListener('change', (e) => {
+            if (!isVideoLoaded) return;
+            const targetTime = parseFloat(e.target.value);
+            if (isFinite(targetTime) && targetTime >= 0 && targetTime <= video.duration) {
+                // 停止拖动，立刻跳转到指定时间，并且seeked事件会触发提取帧并更新UI
+                video.currentTime = targetTime;
+                // 由于seeked异步，结束后会调用 captureCurrentFrameToCanvas
+                // 如果由于网络等原因 seeked 没触发? 保险起见再设一个一次性监听补丁, 但标准浏览器足够
+            }
+            isDraggingSlider = false;
+            pendingSeek = false;
+        });
+        
+        // 全局窗口鼠标松开保险 (如果鼠标在滑块外松开，也能确保结束拖动状态)
+        window.addEventListener('mouseup', () => {
+            if (isDraggingSlider && isVideoLoaded) {
+                // 确保最终滑块值生效，如果未触发change则手动触发最后一次跳转
+                const finalTime = parseFloat(seekSlider.value);
+                if (isFinite(finalTime) && !isNaN(finalTime) && Math.abs(video.currentTime - finalTime) > 0.05) {
+                    video.currentTime = finalTime;
+                }
+                isDraggingSlider = false;
+            }
+        });
+        
+        // 播放/暂停按钮
+        function togglePlayPause() {
+            if (!isVideoLoaded) return;
+            if (video.paused) {
+                video.play().catch(e => console.warn("自动播放被阻止，请手动点击播放", e));
+            } else {
+                video.pause();
+            }
+        }
+        playPauseBtn.addEventListener('click', togglePlayPause);
+        
+        // 手动提取帧按钮（完全基于video当前实时帧，并刷新右侧canvas）
+        manualCaptureBtn.addEventListener('click', () => {
+            if (!isVideoLoaded) {
+                alert("请先导入视频文件");
+                return;
+            }
+            if (video.readyState < 2) {
+                alert("视频尚未加载完成，请稍后");
+                return;
+            }
+            const success = captureCurrentFrameToCanvas();
+            if (success) {
+                // 轻反馈
+                manualCaptureBtn.style.transform = "scale(0.95)";
+                setTimeout(() => { manualCaptureBtn.style.transform = ""; }, 150);
+            } else {
+                alert("提取失败，请确保视频已正常播放或重试");
+            }
+        });
+        
+        // 导出图片 (使用右侧canvas当前画面)
+        function exportImage() {
+            if (!isVideoLoaded) {
+                alert("没有加载视频，请先导入视频文件");
+                return;
+            }
+            // 确保canvas内容是最新帧: 为防止手动未提取但是视频已改变，最好再从video实时捕获一次保证同步（但滑动时已自动捕获，导出前再同步一下）
+            // 为了精确，先捕获一次当前视频帧（确保导出和视频完全一致）
+            const captureOk = captureCurrentFrameToCanvas();
+            if (!captureOk) {
+                alert("无法从视频捕获帧，请检查视频是否有效");
+                return;
+            }
+            
+            const format = imageFormatSelect.value;   // mime类型
+            let quality = parseFloat(qualitySlider.value);
+            if (isNaN(quality)) quality = 0.92;
+            quality = Math.min(1.0, Math.max(0.1, quality));
+            
+            let mimeType = format;
+            let fileExtension = "";
+            if (format === "image/png") fileExtension = "png";
+            else if (format === "image/jpeg") fileExtension = "jpg";
+            else if (format === "image/webp") fileExtension = "webp";
+            else fileExtension = "png";
+            
+            // 根据质量导出 (PNG忽略质量参数)
+            let dataURL = null;
+            try {
+                if (format === "image/jpeg") {
+                    dataURL = frameCanvas.toDataURL(mimeType, quality);
+                } else if (format === "image/webp") {
+                    dataURL = frameCanvas.toDataURL(mimeType, quality);
+                } else {
+                    dataURL = frameCanvas.toDataURL(mimeType);
+                }
+            } catch(e) {
+                alert("导出失败: " + e.message);
+                return;
+            }
+            
+            // 生成文件名 (包含视频名称部分或时间)
+            let fileName = `frame_${new Date().toISOString().slice(0,19).replace(/:/g, '-')}.${fileExtension}`;
+            // 如果video有src文件名，尽量提取原名
+            if (videoUpload.files && videoUpload.files.length > 0) {
+                const originalName = videoUpload.files[0].name.replace(/\.[^/.]+$/, "");
+                const timeSec = Math.floor(video.currentTime);
+                fileName = `${originalName}_frame_${timeSec}s.${fileExtension}`;
+            }
+            
+            const link = document.createElement('a');
+            link.download = fileName;
+            link.href = dataURL;
+            link.click();
+        }
+        
+        exportBtn.addEventListener('click', exportImage);
+        
+        // 处理质量滑块显示
+        function updateQualityLabel() {
+            const val = Math.round(qualitySlider.value * 100);
+            qualityValue.textContent = `${val}%`;
+        }
+        qualitySlider.addEventListener('input', updateQualityLabel);
+        updateQualityLabel();
+        
+        // 根据格式显示/隐藏质量控件 (PNG时建议灰度显示但不强制隐藏，但最好提示)
+        function toggleQualityVisibility() {
+            const format = imageFormatSelect.value;
+            if (format === 'image/png') {
+                qualityControlDiv.style.opacity = '0.6';
+                qualitySlider.disabled = true;
+            } else {
+                qualityControlDiv.style.opacity = '1';
+                qualitySlider.disabled = false;
+            }
+        }
+        imageFormatSelect.addEventListener('change', toggleQualityVisibility);
+        toggleQualityVisibility();
+        
+        // 导入视频监听
+        videoUpload.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                handleVideoFile(file);
+            }
+        });
+        
+        // 附加拖拽导入区域快捷体验：点击label已经实现，再加个整体提示（可选）
+        // 初始化视频事件绑定
+        bindVideoEvents();
+        
+        // 防止第一次加载时canvas空白初始化
+        const ctx = frameCanvas.getContext('2d');
+        frameCanvas.width = 640;
+        frameCanvas.height = 360;
+        ctx.fillStyle = "#0a121c";
+        ctx.fillRect(0, 0, frameCanvas.width, frameCanvas.height);
+        ctx.fillStyle = "#8aaccc";
+        ctx.font = "14px system-ui";
+        ctx.fillText("等待导入视频", 20, 50);
+        
+        // 如果video有错误提示
+        video.addEventListener('error', (err) => {
+            console.error("视频错误", err);
+            alert("视频加载失败，请检查文件格式或编码，尝试mp4/h264格式");
+            releaseVideo();
+        });
+        
+        // 额外优化: 当滑块禁用时样式提示
+        seekSlider.disabled = true;
+        
+        // 对于某些移动端触屏，添加touch事件支持类似功能
+        seekSlider.addEventListener('touchstart', (e) => {
+            if (!isVideoLoaded) return;
+            isDraggingSlider = true;
+            if (!video.paused) video.pause();
+        });
+        seekSlider.addEventListener('touchend', (e) => {
+            if (!isVideoLoaded) return;
+            const finalTime = parseFloat(seekSlider.value);
+            if (isFinite(finalTime)) {
+                video.currentTime = finalTime;
+            }
+            isDraggingSlider = false;
+        });
+        // 确保在touchmove时不频繁seek，change事件会触发，兼容。
+        
+        // 手动调用一次 updateQualityLabel 确保显示
+        console.log("视频帧提取工具已启动 — 支持滑动进度条停止后自动提取帧，多格式导出");
+    })();
+</script>
+</body>
+</html>
